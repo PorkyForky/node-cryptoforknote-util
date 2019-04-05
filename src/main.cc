@@ -101,8 +101,8 @@ static bool fillExtra(cryptonote::block& block1, const cryptonote::block& block2
 
 static bool mergeBlocks(const cryptonote::block& block1, cryptonote::block& block2, const std::vector<crypto::hash>& branch2) {
     block2.timestamp = block1.timestamp;
-    block2.parent_block.major_version = block1.major_version;
-    block2.parent_block.minor_version = block1.minor_version;
+    block2.parent_block.major_version = 1;
+    block2.parent_block.minor_version = 0;
     block2.parent_block.prev_id = block1.prev_id;
     block2.parent_block.nonce = block1.nonce;
     block2.parent_block.miner_tx = block1.miner_tx;
