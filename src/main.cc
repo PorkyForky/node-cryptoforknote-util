@@ -144,7 +144,7 @@ NAN_METHOD(convert_blob) {
     blobdata input = std::string(Buffer::Data(target), Buffer::Length(target));
     blobdata output = "";
 
-    enum BLOB_TYPE blob_type = BLOB_TYPE_CRYPTONOTE;
+    enum BLOB_TYPE blob_type = BLOB_TYPE_CRYPTONOTE_LOKI;
     if (info.Length() >= 2) {
         if (!info[1]->IsNumber()) return THROW_ERROR_EXCEPTION("Argument 2 should be a number");
         blob_type = static_cast<enum BLOB_TYPE>(Nan::To<int>(info[1]).FromMaybe(0));
@@ -169,7 +169,7 @@ NAN_METHOD(convert_blob) {
         if (!construct_parent_block(b, parent_block)) return THROW_ERROR_EXCEPTION("Failed to construct parent block");
         if (!get_block_hashing_blob(parent_block, output)) return THROW_ERROR_EXCEPTION("Failed to create mining block");
     } else {
-        if (BLOB_TYPE_CRYPTONOTE == blob_type && info.Length() > 2) { // MM
+        if (BLOB_TYPE_CRYPTONOTE_LOKI == blob_type && info.Length() > 2) { // MM
             if (!fillExtra(b, b2)) {
                 return THROW_ERROR_EXCEPTION("Failed to add merged mining tag to parent block extra (convert_blob)");
             }
@@ -190,7 +190,7 @@ NAN_METHOD(get_block_id) {
     blobdata input = std::string(Buffer::Data(target), Buffer::Length(target));
     blobdata output = "";
 
-    enum BLOB_TYPE blob_type = BLOB_TYPE_CRYPTONOTE;
+    enum BLOB_TYPE blob_type = BLOB_TYPE_CRYPTONOTE_LOKI;
     if (info.Length() >= 2) {
         if (!info[1]->IsNumber()) return THROW_ERROR_EXCEPTION("Argument 2 should be a number");
         blob_type = static_cast<enum BLOB_TYPE>(Nan::To<int>(info[1]).FromMaybe(0));
@@ -221,7 +221,7 @@ NAN_METHOD(construct_block_blob) {
     blobdata block_template_blob = std::string(Buffer::Data(block_template_buf), Buffer::Length(block_template_buf));
     blobdata output = "";
 
-    enum BLOB_TYPE blob_type = BLOB_TYPE_CRYPTONOTE;
+    enum BLOB_TYPE blob_type = BLOB_TYPE_CRYPTONOTE_LOKI;
     if (info.Length() >= 3) {
         if (!info[2]->IsNumber()) return THROW_ERROR_EXCEPTION("Argument 3 should be a number");
         blob_type = static_cast<enum BLOB_TYPE>(Nan::To<int>(info[2]).FromMaybe(0));
@@ -246,7 +246,7 @@ NAN_METHOD(construct_block_blob) {
         b.parent_block.nonce = nonce;
         if (!construct_parent_block(b, parent_block)) return THROW_ERROR_EXCEPTION("Failed to construct parent block");
         if (!mergeBlocks(parent_block, b, std::vector<crypto::hash>())) return THROW_ERROR_EXCEPTION("Failed to postprocess mining block");
-    } else if (BLOB_TYPE_CRYPTONOTE == blob_type && info.Length() > 3) { // MM
+    } else if (BLOB_TYPE_CRYPTONOTE_LOKI == blob_type && info.Length() > 3) { // MM
             if (!fillExtra(b, b2)) {
                 return THROW_ERROR_EXCEPTION("Failed to add merged mining tag to parent block extra");
             }
@@ -342,7 +342,7 @@ NAN_METHOD(merge_blocks) {
     blobdata output = "";
 
     block b = AUTO_VAL_INIT(b);
-    b.set_blob_type(BLOB_TYPE_CRYPTONOTE);
+    b.set_blob_type(BLOB_TYPE_CRYPTONOTE_LOKI);
     if (!parse_and_validate_block_from_blob(block_template_blob, b)) return THROW_ERROR_EXCEPTION("Failed to parse parent block (merge_blocks)");
 
     block b2 = AUTO_VAL_INIT(b2);
@@ -375,7 +375,7 @@ NAN_METHOD(fill_extra) {
 
     //convert
     block b = AUTO_VAL_INIT(b);
-    b.set_blob_type(BLOB_TYPE_CRYPTONOTE);
+    b.set_blob_type(BLOB_TYPE_CRYPTONOTE_LOKI);
     if (!parse_and_validate_block_from_blob(input, b)) return THROW_ERROR_EXCEPTION("Failed to parse block");
 
     block b2 = AUTO_VAL_INIT(b2);
