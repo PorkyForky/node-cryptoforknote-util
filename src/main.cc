@@ -38,7 +38,7 @@ blobdata uint64be_to_blob(uint64_t num) {
 }
 
 
-/*                                    
+                             
 static bool fillExtra(cryptonote::block& block1, const cryptonote::block& block2) {
     cryptonote::tx_extra_merge_mining_tag mm_tag;
     mm_tag.depth = 0;
@@ -49,10 +49,9 @@ static bool fillExtra(cryptonote::block& block1, const cryptonote::block& block2
 
     return true;
 }
-*/
 
 
-static bool fillExtra(cryptonote::block& block1, const cryptonote::block& block2)
+static bool fillExtraMM(cryptonote::block& block1, const cryptonote::block& block2)
 {
     if (block2.timestamp > block1.timestamp) { // get the most recent timestamp (solve duplicated timestamps on child coin)
         block1.timestamp = block2.timestamp;
@@ -75,17 +74,16 @@ static bool fillExtra(cryptonote::block& block1, const cryptonote::block& block2
     cryptonote::tx_extra_merge_mining_tag tag;
     tag.depth = 0;
     if (!cryptonote::get_block_header_hash(block2, tag.merkle_root)) {
-     return false;
+        return false;
     }
-
 
     std::vector<uint8_t> extraNonceReplacement;
     if (!cryptonote::append_mm_tag_to_extra(extraNonceReplacement, tag)) {
-     return false;
+        return false;
     }
 
     if (MERGE_MINING_TAG_RESERVED_SIZE < extraNonceReplacement.size()) {
-     return false;
+        return false;
     }
 
     size_t diff = (extraNonceTemplate.size() + POOL_NONCE_SIZE) - extraNonceReplacement.size();
@@ -95,14 +93,15 @@ static bool fillExtra(cryptonote::block& block1, const cryptonote::block& block2
     }
 
     std::copy(extraNonceReplacement.begin(), extraNonceReplacement.end(), extra.begin() + extraNoncePos);
+
     return true;
 }
 
 
 static bool mergeBlocks(const cryptonote::block& block1, cryptonote::block& block2, const std::vector<crypto::hash>& branch2) {
     block2.timestamp = block1.timestamp;
-    block2.parent_block.major_version = 1;
-    block2.parent_block.minor_version = 0;
+    block2.parent_block.major_version = block1.major_version;
+    block2.parent_block.minor_version = block1.minor_version;
     block2.parent_block.prev_id = block1.prev_id;
     block2.parent_block.nonce = block1.nonce;
     block2.parent_block.miner_tx = block1.miner_tx;
@@ -134,7 +133,9 @@ NAN_METHOD(get_merge_mining_tag_reserved_size) {
     info.GetReturnValue().Set(returnValue);
 }
 
-
+/*
+ * var blob = convert_blob (parentBlockBuffer, cnBlobType, [childBlockBuffer], [PoW])
+ */
 NAN_METHOD(convert_blob) {
     if (info.Length() < 1) return THROW_ERROR_EXCEPTION("You must provide one argument.");
 
@@ -150,31 +151,38 @@ NAN_METHOD(convert_blob) {
         blob_type = static_cast<enum BLOB_TYPE>(Nan::To<int>(info[1]).FromMaybe(0));
     }
 
+    enum POW_TYPE pow_type = POW_TYPE_NOT_SET;
+    if (info.Length() >= 4) {
+        if (!info[3]->IsNumber()) return THROW_ERROR_EXCEPTION("Argument 4 should be a number");
+        pow_type = static_cast<enum POW_TYPE>(Nan::To<int>(info[3]).FromMaybe(0));
+    }
+
     //convert
     block b = AUTO_VAL_INIT(b);
     b.set_blob_type(blob_type);
     if (!parse_and_validate_block_from_blob(input, b)) return THROW_ERROR_EXCEPTION("Failed to parse block");
 
     block b2 = AUTO_VAL_INIT(b2);
-    if (info.Length() > 2) { // MM
+    if (info.Length() > 2 && !info[2]->IsNumber()) { // MM
         b2.set_blob_type(BLOB_TYPE_FORKNOTE2); // Only forknote 2 blob types support being mm as child coin
         Local<Object> child_target = info[2]->ToObject();
         blobdata child_input = std::string(Buffer::Data(child_target), Buffer::Length(child_target));
-        if (!Buffer::HasInstance(child_target)) return THROW_ERROR_EXCEPTION("Argument (Child block) should be a buffer object.");
-        if (!parse_and_validate_block_from_blob(child_input, b2)) return THROW_ERROR_EXCEPTION("Failed to parse child block");
+        if (!Buffer::HasInstance(child_target)) return THROW_ERROR_EXCEPTION("convert_blob: Argument (Child block) should be a buffer object.");
+        if (!parse_and_validate_block_from_blob(child_input, b2)) return THROW_ERROR_EXCEPTION("convert_blob: Failed to parse child block");
     }
 
     if (blob_type == BLOB_TYPE_FORKNOTE2) {
         block parent_block;
-        if (!construct_parent_block(b, parent_block)) return THROW_ERROR_EXCEPTION("Failed to construct parent block");
-        if (!get_block_hashing_blob(parent_block, output)) return THROW_ERROR_EXCEPTION("Failed to create mining block");
+        if (POW_TYPE_NOT_SET != pow_type) b.minor_version = pow_type;
+        if (!construct_parent_block(b, parent_block)) return THROW_ERROR_EXCEPTION("convert_blob: Failed to construct parent block");
+        if (!get_block_hashing_blob(parent_block, output)) return THROW_ERROR_EXCEPTION("convert_blob: Failed to create mining block");
     } else {
         if (info.Length() > 2 && !info[2]->IsNumber()) { // MM
-            if (!fillExtra(b, b2)) {
-                return THROW_ERROR_EXCEPTION("Failed to add merged mining tag to parent block extra (convert_blob)");
+            if (!fillExtraMM(b, b2)) {
+                return THROW_ERROR_EXCEPTION("convert_blob: Failed to add merged mining tag to parent block extra");
             }
         }
-        if (!get_block_hashing_blob(b, output)) return THROW_ERROR_EXCEPTION("Failed to create mining block");
+        if (!get_block_hashing_blob(b, output)) return THROW_ERROR_EXCEPTION("convert_blob: Failed to create mining block");
     }
 
     v8::Local<v8::Value> returnValue = Nan::CopyBuffer((char*)output.data(), output.size()).ToLocalChecked();
@@ -208,6 +216,9 @@ NAN_METHOD(get_block_id) {
     info.GetReturnValue().Set(returnValue);
 }
 
+/*
+ * var shareBuffer = construct_block_blob(parentBlockTemplateBuffer, nonceBuffer, cnBlobType, [childBlockTemplateBuffer], [PoW]);
+ */
 NAN_METHOD(construct_block_blob) {
     if (info.Length() < 2) return THROW_ERROR_EXCEPTION("You must provide two arguments.");
 
@@ -227,12 +238,18 @@ NAN_METHOD(construct_block_blob) {
         blob_type = static_cast<enum BLOB_TYPE>(Nan::To<int>(info[2]).FromMaybe(0));
     }
 
+    enum POW_TYPE pow_type = POW_TYPE_NOT_SET;
+    if (info.Length() >= 5) {
+        if (!info[4]->IsNumber()) return THROW_ERROR_EXCEPTION("Argument 5 should be a number");
+        pow_type = static_cast<enum POW_TYPE>(Nan::To<int>(info[4]).FromMaybe(0));
+    }
+
     block b = AUTO_VAL_INIT(b);
     b.set_blob_type(blob_type);
     if (!parse_and_validate_block_from_blob(block_template_blob, b)) return THROW_ERROR_EXCEPTION("Failed to parse block");
 
     block b2 = AUTO_VAL_INIT(b2);
-    if (info.Length() > 3) { // MM
+    if (info.Length() > 3 && !info[3]->IsNumber()) { // MM
         b2.set_blob_type(BLOB_TYPE_FORKNOTE2); // Only forknote 2 blob types support being mm as child coin
         Local<Object> child_target = info[3]->ToObject();
         blobdata child_input = std::string(Buffer::Data(child_target), Buffer::Length(child_target));
@@ -244,10 +261,11 @@ NAN_METHOD(construct_block_blob) {
     if (blob_type == BLOB_TYPE_FORKNOTE2) {
         block parent_block;
         b.parent_block.nonce = nonce;
+        if (POW_TYPE_NOT_SET != pow_type) b.minor_version = pow_type;
         if (!construct_parent_block(b, parent_block)) return THROW_ERROR_EXCEPTION("Failed to construct parent block");
         if (!mergeBlocks(parent_block, b, std::vector<crypto::hash>())) return THROW_ERROR_EXCEPTION("Failed to postprocess mining block");
     } else if (info.Length() > 3 && !info[3]->IsNumber()) { // MM
-            if (!fillExtra(b, b2)) {
+            if (!fillExtraMM(b, b2)) {
                 return THROW_ERROR_EXCEPTION("Failed to add merged mining tag to parent block extra");
             }
         }
@@ -321,7 +339,7 @@ NAN_METHOD(address_decode_integrated) {
 
 
 /**
- * var mmShareBuffer = merge_blocks(shareBuffer, childBlockTemplate);
+ * var mmShareBuffer = merge_blocks(shareBuffer, childBlockTemplate, [PoW] );
  */
 NAN_METHOD(merge_blocks) {
 
@@ -337,6 +355,12 @@ NAN_METHOD(merge_blocks) {
     if (!Buffer::HasInstance(child_block_template_buf))
         return THROW_ERROR_EXCEPTION("Second argument should be a buffer object.");
 
+    enum POW_TYPE pow_type = POW_TYPE_NOT_SET;
+    if (info.Length() >= 3) {
+        if (!info[2]->IsNumber()) return THROW_ERROR_EXCEPTION("Argument 3 should be a number");
+        pow_type = static_cast<enum POW_TYPE>(Nan::To<int>(info[2]).FromMaybe(0));
+    }
+
     blobdata block_template_blob = std::string(Buffer::Data(block_template_buf), Buffer::Length(block_template_buf));
     blobdata child_block_template_blob = std::string(Buffer::Data(child_block_template_buf), Buffer::Length(child_block_template_buf));
     blobdata output = "";
@@ -351,7 +375,8 @@ NAN_METHOD(merge_blocks) {
 
     if (!mergeBlocks(b, b2, std::vector<crypto::hash>()))
             return THROW_ERROR_EXCEPTION("mergeBlocks(b,b2): Failed to postprocess mining block");
-
+    if (POW_TYPE_NOT_SET != pow_type) b2.minor_version = pow_type;
+    
     if (!block_to_blob(b2, output)) {
         return THROW_ERROR_EXCEPTION("Failed to convert block to blob (merge_blocks)");
     }
@@ -384,7 +409,7 @@ NAN_METHOD(fill_extra) {
 
 
     
-    if (!fillExtra(b, b2)) {
+    if (!fillExtraMM(b, b2)) {
         return THROW_ERROR_EXCEPTION("Failed to add merged mining tag to parent block extra (convert_blob)");
     }
     if (!get_block_hashing_blob(b, output)) return THROW_ERROR_EXCEPTION("Failed to create mining block");
