@@ -160,6 +160,9 @@ namespace cryptonote
     //extra
     std::vector<uint8_t> extra;
 
+    //
+    // NOTE: Loki specific
+    //
     std::vector<uint64_t> output_unlock_times;
     enum loki_type_t
     {
@@ -217,7 +220,7 @@ namespace cryptonote
     BEGIN_SERIALIZE_OBJECT()
       FIELDS(*static_cast<transaction_prefix *>(this))
 
-      if (version == 1 && blob_type != BLOB_TYPE_CRYPTONOTE2 && blob_type != BLOB_TYPE_CRYPTONOTE3)
+      if (version == 1 && blob_type != BLOB_TYPE_CRYPTONOTE2)
       {
         ar.tag("signatures");
         ar.begin_array();
@@ -430,7 +433,6 @@ namespace cryptonote
 
     transaction miner_tx;
     std::vector<crypto::hash> tx_hashes;
-    mutable crypto::hash uncle = cryptonote::null_hash;
 
     void set_blob_type(enum BLOB_TYPE bt) { miner_tx.blob_type = blob_type = bt; }
 
@@ -443,10 +445,6 @@ namespace cryptonote
       }
       FIELD(miner_tx)
       FIELD(tx_hashes)
-      if (blob_type == BLOB_TYPE_CRYPTONOTE3)
-      {
-        FIELD(uncle)
-      }
     END_SERIALIZE()
   };
 
